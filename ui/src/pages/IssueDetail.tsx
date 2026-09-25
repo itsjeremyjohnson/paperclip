@@ -6864,7 +6864,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
           // Approving needs its note in the same update: open the decision
           // controls instead of sending a status change the server rejects.
           if (isMobile) setMobilePropsOpen(true);
-          else setPanelVisible(true);
+          else openTaskSidePanel();
           window.setTimeout(() => {
             if (focusStageDecisionNote()) return;
             pushToast({
@@ -8120,7 +8120,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                         : undefined
                     }
                     onAddSubIssue={openNewSubIssue}
-                    onUpdate={(data) => updateIssue.mutate(data)}
+                    onUpdate={handleIssuePropertiesUpdate}
                     inline
                     hasActiveRun={resolvedHasActiveRun}
                     externalObjects={
@@ -8183,7 +8183,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
                             : undefined
                         }
                         onAddSubIssue={openNewSubIssue}
-                        onUpdate={(data) => updateIssue.mutate(data)}
+                        onUpdate={handleIssuePropertiesUpdate}
                         inline
                         hasActiveRun={resolvedHasActiveRun}
                         externalObjects={
