@@ -70,9 +70,13 @@ export function stageDecisionKey(
 
 const STAGE_DECISION_NOTE_SELECTOR = "[data-stage-decision-note]";
 
-/** Focuses the decision note in the properties panel. Returns false when it is not rendered. */
+/**
+ * Focuses the visible decision note. Desktop and mobile properties can both be
+ * mounted, so hidden copies are skipped. Returns false when none is visible.
+ */
 export function focusStageDecisionNote(): boolean {
-  const note = document.querySelector<HTMLTextAreaElement>(STAGE_DECISION_NOTE_SELECTOR);
+  const note = Array.from(document.querySelectorAll<HTMLTextAreaElement>(STAGE_DECISION_NOTE_SELECTOR))
+    .find((element) => element.getClientRects().length > 0);
   note?.focus();
   return !!note;
 }

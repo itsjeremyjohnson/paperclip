@@ -860,6 +860,11 @@ export const updateIssueSchema = objectWithoutDefaults(
     attachmentIds: issueCommentAttachmentIdsSchema.optional(),
     onBehalfOfUserId: z.string().trim().min(1).optional().nullable(),
     reviewInteractionId: z.string().guid().optional(),
+    /**
+     * Stage decisions only: the pending execution stage the caller decided on.
+     * A mismatch returns 409, so a stale decision cannot act on a later stage.
+     */
+    expectedExecutionStageId: z.string().trim().min(1).max(200).optional(),
     reviewRequest: issueReviewRequestSchema.optional().nullable(),
     reopen: z.boolean().optional(),
     resume: z.boolean().optional(),

@@ -1096,8 +1096,12 @@ export function IssueProperties({
     submittedStageDecisionKeyRef.current = key;
     setSubmittedStageDecisionKey(key);
     // Requesting changes must send exactly `in_progress`: other statuses from
-    // the participant clear the stage without recording a decision.
-    void Promise.resolve(onUpdate({ status, comment })).then((result) => {
+    // the participant clear the stage without recording a decision. The stage
+    // id makes the server reject the decision if the stage has since changed.
+    const expectedExecutionStageId = issue.executionState?.currentStageId;
+    void Promise.resolve(
+      onUpdate({ status, comment, ...(expectedExecutionStageId ? { expectedExecutionStageId } : {}) }),
+    ).then((result) => {
       if (result === false && submittedStageDecisionKeyRef.current === key) {
         submittedStageDecisionKeyRef.current = null;
         setSubmittedStageDecisionKey(null);

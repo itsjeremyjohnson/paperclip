@@ -2752,7 +2752,7 @@ describe("IssueProperties", () => {
       approve().click();
     });
     expect(onUpdate).toHaveBeenCalledTimes(1);
-    expect(onUpdate).toHaveBeenCalledWith({ status: "done", comment: "Approved, ship it." });
+    expect(onUpdate).toHaveBeenCalledWith({ status: "done", comment: "Approved, ship it.", expectedExecutionStageId: "stage-1" });
     expect(approve().disabled).toBe(true);
     expect(requestChanges().disabled).toBe(true);
 
@@ -2770,7 +2770,7 @@ describe("IssueProperties", () => {
 
     await typeDecisionNote("Needs the phone port date.");
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="stage-decision-request-changes"]')!.click());
-    expect(onUpdate).toHaveBeenCalledWith({ status: "in_progress", comment: "Needs the phone port date." });
+    expect(onUpdate).toHaveBeenCalledWith({ status: "in_progress", comment: "Needs the phone port date.", expectedExecutionStageId: "stage-1" });
 
     act(() => root.unmount());
   });
