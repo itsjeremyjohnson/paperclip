@@ -2531,16 +2531,21 @@ describe("IssueDetail", () => {
       'button[aria-label="Change status (current: in_review)"]',
     );
     expect(statusButton).not.toBeNull();
+    mockSetPanelVisible.mockClear();
     await act(async () => {
       statusButton!.dispatchEvent(
         new MouseEvent("click", { bubbles: true, cancelable: true }),
       );
     });
-    await waitForAssertion(() => {
-      expect(mockPushToast).toHaveBeenCalledWith(
-        expect.objectContaining({ title: "Add a decision note to approve" }),
-      );
+    expect(mockSetPanelVisible).toHaveBeenCalledWith(true);
+    // The properties panel is mocked here, so the note cannot take focus and
+    // the fallback guidance appears instead.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
     });
+    expect(mockPushToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Add a decision note to approve" }),
+    );
     expect(mockIssuesApi.update).not.toHaveBeenCalled();
   });
 

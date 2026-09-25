@@ -42,7 +42,7 @@ import {
 import { getRecentProjectIds, trackRecentProject } from "../../lib/recent-projects";
 import { orderItemsBySelectedAndRecent } from "../../lib/recent-selections";
 import { formatAssigneeUserLabel, formatUserLabel } from "../../lib/assignees";
-import { buildExecutionPolicy, isStageDecisionPendingForUser, stageParticipantValues } from "../../lib/issue-execution-policy";
+import { buildExecutionPolicy, stageDecisionKey, stageParticipantValues } from "../../lib/issue-execution-policy";
 import {
   formatMonitorAbsolute,
   formatMonitorAbsoluteFull,
@@ -189,7 +189,8 @@ interface IssuePropertiesProps {
   childIssues?: Issue[];
   issueLinkState?: unknown;
   onAddSubIssue?: () => void;
-  onUpdate: (data: Record<string, unknown>) => void;
+  /** Resolves to false when the update fails; hosts may also return nothing. */
+  onUpdate: (data: Record<string, unknown>) => void | Promise<boolean>;
   inline?: boolean;
   /** Whether an agent run is currently in flight on this issue, so the assignee
    * picker can warn that reassigning will interrupt it. */
@@ -1070,19 +1071,38 @@ export function IssueProperties({
   // The server records a stage decision only when the status change and the
   // decision comment arrive in the same PATCH, so the decision needs its own
   // controls instead of the status picker plus a separate thread comment.
-  const pendingStageDecisionForCurrentUser = isStageDecisionPendingForUser(issue.executionState, currentUserId);
+  const currentStageDecisionKey = stageDecisionKey(issue.id, issue.executionState, currentUserId);
+  const pendingStageDecisionForCurrentUser = currentStageDecisionKey !== null;
   const [stageDecisionNote, setStageDecisionNote] = useState("");
   const stageDecisionNoteRef = useRef<HTMLTextAreaElement>(null);
+  // One decision per stage: a second submission could land after the stage
+  // advances, where the server treats this user as a board override and would
+  // complete the issue without the next participant.
+  const submittedStageDecisionKeyRef = useRef<string | null>(null);
+  const [submittedStageDecisionKey, setSubmittedStageDecisionKey] = useState<string | null>(null);
+  const stageDecisionSubmitting =
+    currentStageDecisionKey !== null && submittedStageDecisionKey === currentStageDecisionKey;
   useEffect(() => {
-    // Keep the note if a submission fails; clear it once the stage moves on.
-    if (!pendingStageDecisionForCurrentUser) setStageDecisionNote("");
-  }, [pendingStageDecisionForCurrentUser, issue.id]);
+    // A new stage starts with an empty note. A failed submission keeps the key,
+    // so the note survives for a retry.
+    setStageDecisionNote("");
+    submittedStageDecisionKeyRef.current = null;
+    setSubmittedStageDecisionKey(null);
+  }, [currentStageDecisionKey]);
   const submitStageDecision = (status: "done" | "in_progress") => {
     const comment = stageDecisionNote.trim();
-    if (!comment) return;
+    const key = currentStageDecisionKey;
+    if (!comment || !key || submittedStageDecisionKeyRef.current === key) return;
+    submittedStageDecisionKeyRef.current = key;
+    setSubmittedStageDecisionKey(key);
     // Requesting changes must send exactly `in_progress`: other statuses from
     // the participant clear the stage without recording a decision.
-    onUpdate({ status, comment });
+    void Promise.resolve(onUpdate({ status, comment })).then((result) => {
+      if (result === false && submittedStageDecisionKeyRef.current === key) {
+        submittedStageDecisionKeyRef.current = null;
+        setSubmittedStageDecisionKey(null);
+      }
+    });
   };
   useEffect(() => {
     setMonitorAtInput(toDateTimeLocalValue(issue.executionPolicy?.monitor?.nextCheckAt));
@@ -2676,6 +2696,8 @@ export function IssueProperties({
               placeholder="Decision note (required)"
               aria-label="Decision note"
               className="min-h-16 text-sm"
+              disabled={stageDecisionSubmitting}
+              data-stage-decision-note=""
               data-testid="stage-decision-note"
             />
             <div className="flex flex-wrap justify-end gap-2">
@@ -2684,7 +2706,7 @@ export function IssueProperties({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={!stageDecisionNote.trim()}
+                  disabled={!stageDecisionNote.trim() || stageDecisionSubmitting}
                   title={stageDecisionNote.trim() ? undefined : "Add a decision note first"}
                   onClick={() => submitStageDecision("in_progress")}
                   data-testid="stage-decision-request-changes"
@@ -2695,7 +2717,7 @@ export function IssueProperties({
               <Button
                 type="button"
                 size="sm"
-                disabled={!stageDecisionNote.trim()}
+                disabled={!stageDecisionNote.trim() || stageDecisionSubmitting}
                 title={stageDecisionNote.trim() ? undefined : "Add a decision note first"}
                 onClick={() => submitStageDecision("done")}
                 data-testid="stage-decision-approve"

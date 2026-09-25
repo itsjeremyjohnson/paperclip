@@ -88,7 +88,7 @@ import {
   extractIssueWorkModeChanges,
 } from "../lib/issue-timeline-events";
 import { queryKeys } from "../lib/queryKeys";
-import { isStageDecisionPendingForUser } from "../lib/issue-execution-policy";
+import { focusStageDecisionNote, isStageDecisionPendingForUser } from "../lib/issue-execution-policy";
 import { keepPreviousDataForSameQueryTail } from "../lib/query-placeholder-data";
 import {
   mergePendingIssueQueuedComments,
@@ -4304,10 +4304,10 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
     },
   });
   const handleIssuePropertiesUpdate = useCallback(
-    (data: Record<string, unknown>) => {
-      updateIssue.mutate(data);
-    },
-    [updateIssue.mutate],
+    // `onError` already reports failures; the boolean lets controls re-enable.
+    (data: Record<string, unknown>) =>
+      updateIssue.mutateAsync(data).then(() => true, () => false),
+    [updateIssue.mutateAsync],
   );
 
   const updateChildIssue = useMutation({
@@ -6861,11 +6861,18 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
       blockerAttention={issue.blockerAttention}
       onChange={(status) => {
         if (status === "done" && isStageDecisionPendingForUser(issue.executionState, currentUserId)) {
-          pushToast({
-            title: "Add a decision note to approve",
-            body: "Use Approve under Execution in the task properties. The decision needs its note.",
-            tone: "info",
-          });
+          // Approving needs its note in the same update: open the decision
+          // controls instead of sending a status change the server rejects.
+          if (isMobile) setMobilePropsOpen(true);
+          else setPanelVisible(true);
+          window.setTimeout(() => {
+            if (focusStageDecisionNote()) return;
+            pushToast({
+              title: "Add a decision note to approve",
+              body: "Use Approve under Execution in the task properties. The decision needs its note.",
+              tone: "info",
+            });
+          }, 150);
           return;
         }
         updateIssue.mutate({ status });

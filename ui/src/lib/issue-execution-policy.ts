@@ -58,6 +58,25 @@ export function isStageDecisionPendingForUser(
   );
 }
 
+/** Identifies the pending stage a decision belongs to; null when none waits on this user. */
+export function stageDecisionKey(
+  issueId: string,
+  executionState: IssueExecutionState | null | undefined,
+  userId: string | null | undefined,
+): string | null {
+  if (!isStageDecisionPendingForUser(executionState, userId)) return null;
+  return `${issueId}:${executionState?.currentStageId ?? ""}:${userId}`;
+}
+
+const STAGE_DECISION_NOTE_SELECTOR = "[data-stage-decision-note]";
+
+/** Focuses the decision note in the properties panel. Returns false when it is not rendered. */
+export function focusStageDecisionNote(): boolean {
+  const note = document.querySelector<HTMLTextAreaElement>(STAGE_DECISION_NOTE_SELECTOR);
+  note?.focus();
+  return !!note;
+}
+
 export function principalFromSelectionValue(value: string): IssueExecutionStagePrincipal | null {
   const selection = parseAssigneeValue(value);
   if (selection.assigneeAgentId) {

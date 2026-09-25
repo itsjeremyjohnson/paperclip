@@ -2735,23 +2735,70 @@ describe("IssueProperties", () => {
     await flush();
   }
 
-  it("sends a stage decision and its note in one update", async () => {
-    const onUpdate = vi.fn();
+  it("sends an approval with its note once, and re-enables after a failed update", async () => {
+    let settle: (ok: boolean) => void = () => {};
+    const onUpdate = vi.fn(() => new Promise<boolean>((resolve) => { settle = resolve; }));
     const root = await renderPendingApproval(pendingApprovalIssue(), onUpdate);
 
     const approve = () => container.querySelector<HTMLButtonElement>('[data-testid="stage-decision-approve"]')!;
     const requestChanges = () => container.querySelector<HTMLButtonElement>('[data-testid="stage-decision-request-changes"]')!;
+    const note = () => container.querySelector<HTMLTextAreaElement>('[data-testid="stage-decision-note"]')!;
     expect(approve().disabled).toBe(true);
     expect(requestChanges().disabled).toBe(true);
 
     await typeDecisionNote("  Approved, ship it.  ");
-    act(() => approve().click());
-    expect(onUpdate).toHaveBeenLastCalledWith({ status: "done", comment: "Approved, ship it." });
+    act(() => {
+      approve().click();
+      approve().click();
+    });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).toHaveBeenCalledWith({ status: "done", comment: "Approved, ship it." });
+    expect(approve().disabled).toBe(true);
+    expect(requestChanges().disabled).toBe(true);
+
+    await act(async () => settle(false));
+    await flush();
+    expect(approve().disabled).toBe(false);
+    expect(note().value).toBe("  Approved, ship it.  ");
+
+    act(() => root.unmount());
+  });
+
+  it("requests changes with in_progress and its note", async () => {
+    const onUpdate = vi.fn(async () => true);
+    const root = await renderPendingApproval(pendingApprovalIssue(), onUpdate);
 
     await typeDecisionNote("Needs the phone port date.");
-    act(() => requestChanges().click());
-    expect(onUpdate).toHaveBeenLastCalledWith({ status: "in_progress", comment: "Needs the phone port date." });
-    expect(onUpdate).toHaveBeenCalledTimes(2);
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="stage-decision-request-changes"]')!.click());
+    expect(onUpdate).toHaveBeenCalledWith({ status: "in_progress", comment: "Needs the phone port date." });
+
+    act(() => root.unmount());
+  });
+
+  it("starts each pending stage with an empty decision note", async () => {
+    const onUpdate = vi.fn(async () => true);
+    const { root, queryClient } = renderPropertiesWithQueryClient(container, {
+      issue: pendingApprovalIssue({ currentStageType: "review", currentStageId: "review-stage" }),
+      childIssues: [],
+      onUpdate,
+    });
+    await flush();
+    await flush();
+    await typeDecisionNote("Review looks good.");
+
+    act(() => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <IssueProperties
+            issue={pendingApprovalIssue({ currentStageType: "approval", currentStageId: "approval-stage" })}
+            childIssues={[]}
+            onUpdate={onUpdate}
+          />
+        </QueryClientProvider>,
+      );
+    });
+    await flush();
+    expect(container.querySelector<HTMLTextAreaElement>('[data-testid="stage-decision-note"]')!.value).toBe("");
 
     act(() => root.unmount());
   });
