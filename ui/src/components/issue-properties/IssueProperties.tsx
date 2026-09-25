@@ -42,7 +42,7 @@ import {
 import { getRecentProjectIds, trackRecentProject } from "../../lib/recent-projects";
 import { orderItemsBySelectedAndRecent } from "../../lib/recent-selections";
 import { formatAssigneeUserLabel, formatUserLabel } from "../../lib/assignees";
-import { buildExecutionPolicy, stageParticipantValues } from "../../lib/issue-execution-policy";
+import { buildExecutionPolicy, isStageDecisionPendingForUser, stageParticipantValues } from "../../lib/issue-execution-policy";
 import {
   formatMonitorAbsolute,
   formatMonitorAbsoluteFull,
@@ -1070,12 +1070,7 @@ export function IssueProperties({
   // The server records a stage decision only when the status change and the
   // decision comment arrive in the same PATCH, so the decision needs its own
   // controls instead of the status picker plus a separate thread comment.
-  const pendingStageDecisionForCurrentUser =
-    issue.executionState?.status === "pending"
-    && !!issue.executionState.currentStageType
-    && issue.executionState.currentParticipant?.type === "user"
-    && !!currentUserId
-    && issue.executionState.currentParticipant.userId === currentUserId;
+  const pendingStageDecisionForCurrentUser = isStageDecisionPendingForUser(issue.executionState, currentUserId);
   const [stageDecisionNote, setStageDecisionNote] = useState("");
   const stageDecisionNoteRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {

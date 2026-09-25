@@ -1,4 +1,9 @@
-import type { IssueExecutionPolicy, IssueExecutionStageParticipant, IssueExecutionStagePrincipal } from "@paperclipai/shared";
+import type {
+  IssueExecutionPolicy,
+  IssueExecutionStageParticipant,
+  IssueExecutionStagePrincipal,
+  IssueExecutionState,
+} from "@paperclipai/shared";
 import { parseAssigneeValue } from "./assignees";
 
 type StageType = "review" | "approval";
@@ -33,6 +38,24 @@ function newId() {
 
 function principalKey(principal: IssueExecutionStagePrincipal | IssueExecutionStageParticipant) {
   return principal.type === "agent" ? `agent:${principal.agentId}` : `user:${principal.userId}`;
+}
+
+/**
+ * True when a review or approval stage is waiting on this user's decision.
+ * The server records that decision only when status and comment arrive in one
+ * update, so callers route "done" to the decision controls instead.
+ */
+export function isStageDecisionPendingForUser(
+  executionState: IssueExecutionState | null | undefined,
+  userId: string | null | undefined,
+): boolean {
+  return (
+    executionState?.status === "pending"
+    && !!executionState.currentStageType
+    && executionState.currentParticipant?.type === "user"
+    && !!userId
+    && executionState.currentParticipant.userId === userId
+  );
 }
 
 export function principalFromSelectionValue(value: string): IssueExecutionStagePrincipal | null {

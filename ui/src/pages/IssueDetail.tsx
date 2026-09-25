@@ -88,6 +88,7 @@ import {
   extractIssueWorkModeChanges,
 } from "../lib/issue-timeline-events";
 import { queryKeys } from "../lib/queryKeys";
+import { isStageDecisionPendingForUser } from "../lib/issue-execution-policy";
 import { keepPreviousDataForSameQueryTail } from "../lib/query-placeholder-data";
 import {
   mergePendingIssueQueuedComments,
@@ -6858,7 +6859,17 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
       status={issue.status} externalConversationState={issue.externalConversationState}
       size="lg"
       blockerAttention={issue.blockerAttention}
-      onChange={(status) => updateIssue.mutate({ status })}
+      onChange={(status) => {
+        if (status === "done" && isStageDecisionPendingForUser(issue.executionState, currentUserId)) {
+          pushToast({
+            title: "Add a decision note to approve",
+            body: "Use Approve under Execution in the task properties. The decision needs its note.",
+            tone: "info",
+          });
+          return;
+        }
+        updateIssue.mutate({ status });
+      }}
     />
   );
 
