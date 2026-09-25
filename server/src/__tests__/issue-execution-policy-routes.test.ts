@@ -809,6 +809,19 @@ describe("issue execution policy routes", () => {
       expect(mockIssueService.update).not.toHaveBeenCalled();
     });
 
+    it("rejects a decision after the same stage was reassigned to another participant", async () => {
+      const reassigned = pendingOn(firstStageId);
+      reassigned.executionState.currentParticipant = { type: "user", userId: "other-user" };
+      mockIssueService.getById.mockResolvedValue(reassigned);
+
+      const res = await request(await createApp())
+        .patch("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        .send({ status: "done", comment: "Approved.", expectedExecutionStageId: firstStageId });
+
+      expect(res.status).toBe(409);
+      expect(mockIssueService.update).not.toHaveBeenCalled();
+    });
+
     it("records a decision for the expected pending stage", async () => {
       const issue = pendingOn(firstStageId);
       mockIssueService.getById.mockResolvedValue(issue);

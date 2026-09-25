@@ -862,7 +862,8 @@ export const updateIssueSchema = objectWithoutDefaults(
     reviewInteractionId: z.string().guid().optional(),
     /**
      * Stage decisions only: the pending execution stage the caller decided on.
-     * A mismatch returns 409, so a stale decision cannot act on a later stage.
+     * Returns 409 unless that stage is still pending with the caller as its
+     * current participant, so a stale decision cannot act as a board override.
      */
     expectedExecutionStageId: z.string().trim().min(1).max(200).optional(),
     reviewRequest: issueReviewRequestSchema.optional().nullable(),

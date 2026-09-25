@@ -12825,13 +12825,20 @@ export function issueRoutes(
       if (existing.conversationAgentId && req.actor.type === "board" && commentBody) {
         throw unprocessable("Send conversation messages through the comments endpoint with a clientRequestId");
       }
-      // A decision made against one stage must not act on a later one: after the
-      // stage advances, the same status change would be a board override.
+      // A participant's decision must act on the stage they decided on. After
+      // the stage advances or is reassigned, the same status change would be a
+      // board override, so reject it instead.
       const assertExpectedExecutionStage = (issue: { executionState?: unknown } | null) => {
         if (expectedExecutionStageId === undefined) return;
         const state = parseIssueExecutionState(issue?.executionState);
         const currentExecutionStageId = state?.status === "pending" ? state.currentStageId ?? null : null;
-        if (currentExecutionStageId !== expectedExecutionStageId) {
+        const participant = state?.currentParticipant;
+        const actorIsCurrentParticipant = participant
+          ? participant.type === "user"
+            ? actor.actorType === "user" && participant.userId === actor.actorId
+            : actor.actorType === "agent" && participant.agentId === actor.agentId
+          : false;
+        if (currentExecutionStageId !== expectedExecutionStageId || !actorIsCurrentParticipant) {
           throw conflict("This review or approval stage has changed. Reload the task and decide again.", {
             expectedExecutionStageId,
             currentExecutionStageId,
