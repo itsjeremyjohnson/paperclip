@@ -4020,11 +4020,17 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
       return { previousDetailQueries, previousList, selectedCompanyId };
     },
     onSuccess: ({
-      comment: _comment,
+      comment,
       changes: _changes,
       blockedByIssueIds: _blockedByIssueIds,
       ...nextIssue
     }) => {
+      if (comment) {
+        // Stage decisions post their comment through this PATCH.
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.issues.comments(issueId!),
+        });
+      }
       const issueRefs = new Set<string>([issueId!, nextIssue.id]);
       if (nextIssue.identifier) issueRefs.add(nextIssue.identifier);
       mergeIssueResponseIntoCaches(issueRefs, nextIssue);

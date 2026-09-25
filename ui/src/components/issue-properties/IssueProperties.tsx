@@ -1067,6 +1067,28 @@ export function IssueProperties({
     }
     return `${stageLabel} pending${participantLabel ? ` with ${participantLabel}` : ""}`;
   })();
+  // The server records a stage decision only when the status change and the
+  // decision comment arrive in the same PATCH, so the decision needs its own
+  // controls instead of the status picker plus a separate thread comment.
+  const pendingStageDecisionForCurrentUser =
+    issue.executionState?.status === "pending"
+    && !!issue.executionState.currentStageType
+    && issue.executionState.currentParticipant?.type === "user"
+    && !!currentUserId
+    && issue.executionState.currentParticipant.userId === currentUserId;
+  const [stageDecisionNote, setStageDecisionNote] = useState("");
+  const stageDecisionNoteRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    // Keep the note if a submission fails; clear it once the stage moves on.
+    if (!pendingStageDecisionForCurrentUser) setStageDecisionNote("");
+  }, [pendingStageDecisionForCurrentUser, issue.id]);
+  const submitStageDecision = (status: "done" | "in_progress") => {
+    const comment = stageDecisionNote.trim();
+    if (!comment) return;
+    // Requesting changes must send exactly `in_progress`: other statuses from
+    // the participant clear the stage without recording a decision.
+    onUpdate({ status, comment });
+  };
   useEffect(() => {
     setMonitorAtInput(toDateTimeLocalValue(issue.executionPolicy?.monitor?.nextCheckAt));
     setMonitorNotesInput(issue.executionPolicy?.monitor?.notes ?? "");
@@ -2337,7 +2359,13 @@ export function IssueProperties({
             status={issue.status} externalConversationState={issue.externalConversationState}
             className="size-3"
             blockerAttention={issue.blockerAttention}
-            onChange={(status) => onUpdate({ status })}
+            onChange={(status) => {
+              if (status === "done" && pendingStageDecisionForCurrentUser) {
+                stageDecisionNoteRef.current?.focus();
+                return;
+              }
+              onUpdate({ status });
+            }}
             showLabel
           />
         </PropertyRow>
@@ -2644,6 +2672,44 @@ export function IssueProperties({
             <span className="text-sm truncate min-w-0" title={currentExecutionLabel}>{currentExecutionLabel}</span>
           </PropertyRow>
         )}
+        {pendingStageDecisionForCurrentUser ? (
+          <div className="flex flex-col gap-2 py-1" data-testid="stage-decision">
+            <Textarea
+              ref={stageDecisionNoteRef}
+              value={stageDecisionNote}
+              onChange={(event) => setStageDecisionNote(event.target.value)}
+              placeholder="Decision note (required)"
+              aria-label="Decision note"
+              className="min-h-16 text-sm"
+              data-testid="stage-decision-note"
+            />
+            <div className="flex flex-wrap justify-end gap-2">
+              {issue.executionState?.returnAssignee ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!stageDecisionNote.trim()}
+                  title={stageDecisionNote.trim() ? undefined : "Add a decision note first"}
+                  onClick={() => submitStageDecision("in_progress")}
+                  data-testid="stage-decision-request-changes"
+                >
+                  Request changes
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                disabled={!stageDecisionNote.trim()}
+                title={stageDecisionNote.trim() ? undefined : "Add a decision note first"}
+                onClick={() => submitStageDecision("done")}
+                data-testid="stage-decision-approve"
+              >
+                Approve
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {showScheduledRetryRow && scheduledRetry?.scheduledRetryReason === "workspace_busy" ? (
           <PropertyRow label="Workspace">
