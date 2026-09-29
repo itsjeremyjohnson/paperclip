@@ -5864,6 +5864,52 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     expect((await db.select().from(issues).where(eq(issues.id, issueId)))[0]?.status).toBe("blocked");
   });
 
+  it("leaves a todo task open when another run starts during exhausted handoff retry", async () => {
+    const { companyId, agentId, runId, issueId } = await seedStrandedIssueFixture({
+      status: "todo",
+      runStatus: "failed",
+      runErrorCode: "server_shutdown_interrupted",
+    });
+    await db.update(heartbeatRuns).set({
+      status: "interrupted",
+      contextSnapshot: {
+        issueId,
+        taskId: issueId,
+        wakeReason: "finish_successful_run_handoff",
+        sourceRunId: randomUUID(),
+        handoffRequired: true,
+        handoffReason: "successful_run_missing_state",
+        handoffAttempt: 1,
+        maxHandoffAttempts: 1,
+      },
+    }).where(eq(heartbeatRuns.id, runId));
+
+    const scheduleRecoveryRetry = vi.fn(async (predecessorId: string) => {
+      expect(predecessorId).toBe(runId);
+      await db.insert(heartbeatRuns).values({
+        id: randomUUID(),
+        companyId,
+        agentId,
+        invocationSource: "automation",
+        triggerDetail: "system",
+        status: "running",
+        contextSnapshot: { issueId, taskId: issueId, wakeReason: "issue_commented" },
+        startedAt: new Date(),
+      });
+      return null;
+    });
+    const result = await recoveryService(db, {
+      enqueueWakeup: async () => null,
+      scheduleRecoveryRetry,
+      transientRetryBudgetSpent: () => true,
+    }).reconcileStrandedAssignedIssues();
+
+    expect(scheduleRecoveryRetry).toHaveBeenCalledTimes(1);
+    expect(result.successfulRunHandoffEscalated).toBe(0);
+    expect((await db.select().from(issues).where(eq(issues.id, issueId)))[0]?.status).toBe("todo");
+    expect(await db.select().from(issueRecoveryActions).where(eq(issueRecoveryActions.sourceIssueId, issueId))).toHaveLength(0);
+  });
+
   it("retries an interrupted corrective successful-run handoff instead of escalating it", async () => {
     // A graceful server shutdown (a deploy restart) interrupted the single
     // corrective run before the agent could choose a disposition. That is

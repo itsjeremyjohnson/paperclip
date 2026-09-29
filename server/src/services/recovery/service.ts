@@ -5281,6 +5281,12 @@ export function recoveryService(
           }
         }
 
+        // A run or deferred wake may have started since the sweep's first
+        // live-path check. Do not block the issue under active work.
+        if (await hasActiveExecutionPath(issue.companyId, issue.id, null)) {
+          result.skipped += 1;
+          continue;
+        }
         const updated = await escalateStrandedAssignedIssue({
           issue,
           previousStatus: issue.status === "todo" ? "todo" : "in_progress",
