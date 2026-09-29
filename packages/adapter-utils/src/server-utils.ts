@@ -3220,7 +3220,10 @@ export function buildPaperclipEnv(agent: {
   id: string;
   companyId: string;
 }, options: { executionTargetIsRemote?: boolean } = {}): Record<string, string> {
-  const useLocalListener = options.executionTargetIsRemote === false && Boolean(process.env.PAPERCLIP_LISTEN_PORT);
+  const listenHost = (process.env.PAPERCLIP_LISTEN_HOST ?? process.env.HOST ?? "localhost").trim();
+  const listenerHasLoopback = ["", "localhost", "127.0.0.1", "::1", "0.0.0.0", "::"].includes(listenHost);
+  const useLocalListener = options.executionTargetIsRemote === false &&
+    Boolean(process.env.PAPERCLIP_LISTEN_PORT) && listenerHasLoopback;
   const resolveHostForUrl = (rawHost: string): string => {
     const host = rawHost.trim();
     if (host === "0.0.0.0") return useLocalListener ? "127.0.0.1" : "localhost";
@@ -3234,14 +3237,11 @@ export function buildPaperclipEnv(agent: {
     PAPERCLIP_AGENT_ID: agent.id,
     PAPERCLIP_COMPANY_ID: agent.companyId,
   };
-  const runtimeHost = resolveHostForUrl(
-    process.env.PAPERCLIP_LISTEN_HOST ?? process.env.HOST ?? "localhost",
-  );
+  const runtimeHost = resolveHostForUrl(listenHost);
   const runtimePort =
     process.env.PAPERCLIP_LISTEN_PORT ?? process.env.PORT ?? "3100";
-  // Host-local agent processes can use the server's listener without depending
-  // on public DNS or a session-gated proxy. Remote agents still need the
-  // configured runtime URL (or a run-scoped sandbox bridge).
+  // A host-local process uses HTTP only when the listener accepts loopback.
+  // An explicit LAN bind keeps the configured API URL and its TLS policy.
   const apiUrl =
     useLocalListener
       ? `http://${runtimeHost}:${runtimePort}`

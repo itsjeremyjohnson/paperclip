@@ -3847,6 +3847,23 @@ describe("buildPaperclipEnv", () => {
     );
   });
 
+  it("preserves an HTTPS API URL when the listener binds only to a LAN address", () => {
+    withEnv(
+      {
+        PAPERCLIP_API_URL: "https://paperclip.example.com",
+        PAPERCLIP_RUNTIME_API_URL: "http://192.0.2.10:3200",
+        PAPERCLIP_LISTEN_HOST: "192.0.2.10",
+        PAPERCLIP_LISTEN_PORT: "3200",
+      },
+      () => {
+        expect(buildPaperclipEnv(
+          { id: "agent-1", companyId: "company-1" },
+          { executionTargetIsRemote: false },
+        ).PAPERCLIP_API_URL).toBe("https://paperclip.example.com");
+      },
+    );
+  });
+
   it("falls back to the derived runtime URL when no explicit override is set", () => {
     withEnv({ PAPERCLIP_RUNTIME_API_URL: "http://203.0.113.7:3100" }, () => {
       const env = buildPaperclipEnv({ id: "agent-1", companyId: "company-1" });
