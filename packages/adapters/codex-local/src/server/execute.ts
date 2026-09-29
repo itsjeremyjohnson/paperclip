@@ -36,6 +36,7 @@ import {
   asNumber,
   parseObject,
   buildPaperclipEnv,
+  assertLocalPaperclipApiAccess,
   buildInvocationEnvForLogs,
   ensureAbsoluteDirectory,
   ensurePaperclipSkillSymlink,
@@ -752,7 +753,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     for (const note of preparedRuntimeConfig.notes) {
       await onLog("stdout", `[paperclip] ${note}\n`);
     }
-    const paperclipBaseEnv = buildPaperclipEnv(agent);
+    const paperclipBaseEnv = buildPaperclipEnv(agent, { executionTargetIsRemote });
     const runtimeMcpGateways = (ctx.runtimeMcp?.getServers() ?? []).map((server) => ({
       name: server.name,
       endpointPath: server.url,
@@ -985,6 +986,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       if (paperclipBridge) {
         Object.assign(env, paperclipBridge.env);
       }
+    }
+    if (!executionTargetIsRemote && process.env.PAPERCLIP_LISTEN_PORT && authToken) {
+      await assertLocalPaperclipApiAccess(env);
     }
     const effectiveEnv = Object.fromEntries(
       Object.entries({ ...process.env, ...env }).filter(

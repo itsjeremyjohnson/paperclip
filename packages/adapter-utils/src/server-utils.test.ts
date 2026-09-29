@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createServer } from "node:http";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +14,7 @@ import {
   buildRuntimeMountedSkillSnapshot,
   buildInvocationEnvForLogs,
   buildPaperclipEnv,
+  assertLocalPaperclipApiAccess,
   buildRuntimeToolsEnv,
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
   DEFAULT_PAPERCLIP_CONVERSATION_PROMPT_TEMPLATE,
@@ -3824,6 +3826,24 @@ describe("buildPaperclipEnv", () => {
     );
   });
 
+  it("routes a host-local run to the listener when the public API hostname is unavailable", () => {
+    withEnv(
+      {
+        PAPERCLIP_API_URL: "https://public.example.invalid",
+        PAPERCLIP_RUNTIME_API_URL: "https://public.example.invalid",
+        PAPERCLIP_LISTEN_HOST: "0.0.0.0",
+        PAPERCLIP_LISTEN_PORT: "3200",
+      },
+      () => {
+        const agent = { id: "agent-1", companyId: "company-1" };
+        expect(buildPaperclipEnv(agent, { executionTargetIsRemote: false }).PAPERCLIP_API_URL)
+          .toBe("http://127.0.0.1:3200");
+        expect(buildPaperclipEnv(agent, { executionTargetIsRemote: true }).PAPERCLIP_API_URL)
+          .toBe("https://public.example.invalid");
+      },
+    );
+  });
+
   it("falls back to the derived runtime URL when no explicit override is set", () => {
     withEnv({ PAPERCLIP_RUNTIME_API_URL: "http://203.0.113.7:3100" }, () => {
       const env = buildPaperclipEnv({ id: "agent-1", companyId: "company-1" });
@@ -3842,6 +3862,39 @@ describe("buildPaperclipEnv", () => {
         expect(env.PAPERCLIP_API_URL).toBe("http://localhost:3200");
       },
     );
+  });
+});
+
+describe("local Paperclip API preflight", () => {
+  it("checks the injected run identity through the authenticated API before agent work", async () => {
+    const requests: string[] = [];
+    const server = createServer((req, res) => {
+      requests.push(`${req.url} ${req.headers.authorization}`);
+      res.writeHead(req.headers.authorization === "Bearer run-token" ? 200 : 401, {
+        "content-type": "application/json",
+      });
+      res.end(JSON.stringify({ id: "agent-1", companyId: "company-1" }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Expected a TCP listener");
+      const env = {
+        PAPERCLIP_API_URL: `http://127.0.0.1:${address.port}`,
+        PAPERCLIP_API_KEY: "run-token",
+        PAPERCLIP_AGENT_ID: "agent-1",
+        PAPERCLIP_COMPANY_ID: "company-1",
+      };
+      await expect(assertLocalPaperclipApiAccess(env)).resolves.toBeUndefined();
+      await expect(assertLocalPaperclipApiAccess({ ...env, PAPERCLIP_API_KEY: "wrong-token" }))
+        .rejects.toThrow("Paperclip API preflight rejected the run credential (401)");
+      expect(requests).toEqual([
+        "/api/agents/me Bearer run-token",
+        "/api/agents/me Bearer wrong-token",
+      ]);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
 
