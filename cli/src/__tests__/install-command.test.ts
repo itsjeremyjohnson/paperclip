@@ -189,6 +189,9 @@ describe("managed install commands", () => {
     expect(runCommand.mock.calls.filter(([command, args]) => command === "corepack" && args.includes("pack"))).toHaveLength(1);
     expect(runCommand.mock.calls.filter(([command, args]) => command === process.execPath && args[0]?.endsWith("prepare-bundled-package.mjs"))).toHaveLength(2);
     expect(runCommand.mock.calls.filter(([command, args]) => command === "npm" && args[0] === "pack")).toHaveLength(3);
+    const bundledPackCalls = runCommand.mock.calls.filter(([command, args]) => command === "npm" && args[0] === "pack" && args[1]?.includes("workspace-package-"));
+    expect(bundledPackCalls).toHaveLength(2);
+    expect(bundledPackCalls.every(([, args]) => args.includes("--ignore-scripts"))).toBe(true);
     const installCall = runCommand.mock.calls.find(([command, args]) => command === "npm" && args[0] === "install");
     expect(installCall?.[1].filter((arg) => arg.endsWith(".tgz"))).toHaveLength(4);
   });
