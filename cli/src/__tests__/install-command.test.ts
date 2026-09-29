@@ -114,7 +114,7 @@ describe("managed install commands", () => {
         const packages = [
           { dir: "packages/shared", name: "@paperclipai/shared", packageJson: { name: "@paperclipai/shared", version: "0.3.1" } },
           { dir: "packages/db", name: "@paperclipai/db", packageJson: { name: "@paperclipai/db", version: "0.3.1", dependencies: { "@paperclipai/shared": "workspace:*" }, bundleDependencies: ["embedded-postgres"] } },
-          { dir: "server", name: "@paperclipai/server", packageJson: { name: "@paperclipai/server", version: "0.3.1", dependencies: { "@paperclipai/db": "workspace:*" }, bundleDependencies: ["acpx"], files: ["dist", "ui-dist"] } },
+          { dir: "server", name: "@paperclipai/server", packageJson: { name: "@paperclipai/server", version: "0.3.1", dependencies: { "@paperclipai/db": "workspace:*" }, bundleDependencies: ["acpx"], files: ["dist", "ui-dist", "skills"] } },
         ];
         fs.mkdirSync(path.join(checkout, "cli"), { recursive: true });
         fs.writeFileSync(path.join(checkout, "cli", "package.json"), JSON.stringify({ version: "0.3.1" }));
@@ -142,7 +142,16 @@ describe("managed install commands", () => {
         }
         return { stdout: "", stderr: "" };
       }
-      if (file === "bash") return { stdout: "", stderr: "" };
+      if (file === "bash") {
+        if (args[0] === "scripts/stage-runtime-skills.sh") {
+          const checkout = _options?.cwd;
+          if (typeof checkout !== "string") throw new Error("Git build must use a checkout directory");
+          const skills = path.join(checkout, "server", "skills");
+          fs.mkdirSync(skills, { recursive: true });
+          fs.writeFileSync(path.join(skills, "SKILL.md"), "# Runtime skill");
+        }
+        return { stdout: "", stderr: "" };
+      }
       if (file === "npm" && args[0] === "pack") {
         const packageName = args[1]?.includes("workspace-package-")
           ? JSON.parse(fs.readFileSync(path.join(args[1], "package.json"), "utf8")).name.replace("@paperclipai/", "paperclipai-")
@@ -155,6 +164,9 @@ describe("managed install commands", () => {
         const packageName = path.basename(args[1]) === "server" ? "@paperclipai/server" : "@paperclipai/db";
         if (packageName === "@paperclipai/server" && !fs.existsSync(path.join(args[1], "ui-dist", "index.html"))) {
           throw new Error("Server UI assets are missing from the Git checkout");
+        }
+        if (packageName === "@paperclipai/server" && !fs.existsSync(path.join(args[1], "skills", "SKILL.md"))) {
+          throw new Error("Server runtime skills are missing from the Git checkout");
         }
         fs.mkdirSync(args[2], { recursive: true });
         fs.writeFileSync(path.join(args[2], "package.json"), JSON.stringify({ name: packageName, version: "0.3.1" }));
