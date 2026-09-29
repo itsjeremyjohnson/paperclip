@@ -361,9 +361,18 @@ describe("managed install commands", () => {
     const unrelatedFile = path.join(paths.cliRoot, "keep.txt");
     fs.mkdirSync(paths.cliRoot, { recursive: true });
     fs.writeFileSync(unrelatedFile, "keep");
+    const uninstallService = vi.fn();
 
-    await expect(uninstallCommand()).rejects.toThrow("unverified install store");
+    await expect(uninstallCommand({
+      detectServiceManager: vi.fn(async () => ({
+        supported: true as const,
+        manager: { status: vi.fn(async () => ({ installed: true, active: true })), uninstall: uninstallService } as never,
+      })),
+      platform: "linux",
+      userHomeDir: process.env.HOME!,
+    })).rejects.toThrow("unverified install store");
     expect(fs.readFileSync(unrelatedFile, "utf8")).toBe("keep");
+    expect(uninstallService).not.toHaveBeenCalled();
   });
 
   it("refuses to uninstall while another store mutation holds the lock", async () => {
@@ -381,14 +390,23 @@ describe("managed install commands", () => {
       installedAt: "2026-07-22T18:00:00.000Z",
       previous: [],
     }, paths);
+    const uninstallService = vi.fn();
 
     await withInstallStoreLock(
       async () => {
-        await expect(uninstallCommand()).rejects.toThrow("already running");
+        await expect(uninstallCommand({
+          detectServiceManager: vi.fn(async () => ({
+            supported: true as const,
+            manager: { status: vi.fn(async () => ({ installed: true, active: true })), uninstall: uninstallService } as never,
+          })),
+          platform: "linux",
+          userHomeDir: process.env.HOME!,
+        })).rejects.toThrow("already running");
       },
       paths,
     );
     expect(fs.existsSync(paths.lockPath)).toBe(false);
+    expect(uninstallService).not.toHaveBeenCalled();
   });
 
   it("refuses a symlinked git payload root before downloading", async () => {

@@ -48,6 +48,9 @@ export async function uninstallCommand(
   if (otherDefinitions.length > 0) {
     throw new Error(`Cannot remove the shared managed CLI while other instance services are installed: ${otherDefinitions.join(", ")}. Uninstall those services first.`);
   }
+  const paths = resolveInstallStorePaths();
+  const hadStore = fs.existsSync(paths.cliRoot);
+  if (hadStore) assertManagedInstallStore(paths);
   if (!detection.supported && platform === "linux") {
     const definitionPath = path.join(
       userHomeDir,
@@ -62,16 +65,12 @@ export async function uninstallCommand(
       );
     }
   }
-  if (detection.supported) {
-    const status = await detection.manager.status();
-    if (status.installed || status.active) await detection.manager.uninstall();
-  }
-
-  const paths = resolveInstallStorePaths();
-  const hadStore = fs.existsSync(paths.cliRoot);
-  if (hadStore) assertManagedInstallStore(paths);
   const shimRemoved = await withInstallStoreLock(async () => {
     if (hadStore) assertManagedInstallStore(paths);
+    if (detection.supported) {
+      const status = await detection.manager.status();
+      if (status.installed || status.active) await detection.manager.uninstall();
+    }
     const removed = removeManagedShim(paths);
 
     const home = process.env.HOME;
