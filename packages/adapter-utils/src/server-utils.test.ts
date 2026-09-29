@@ -1877,9 +1877,6 @@ describe("renderPaperclipWakePrompt", () => {
       expect(prompt).toContain(
         "Recovery contract: your job is to RECOVER this task, not to do the work. Do not produce the deliverable yourself.",
       );
-      expect(prompt).toContain(
-        "Before recovery work, make an authenticated GET /api/agents/me from your command shell using PAPERCLIP_API_URL and PAPERCLIP_API_KEY.",
-      );
       expect(prompt).toContain(instruction);
       expect(prompt).toContain(
         "Fallback preference order: (1) send back to Coder",

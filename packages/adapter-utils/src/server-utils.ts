@@ -2423,7 +2423,6 @@ function renderPaperclipWakePromptBody(
     : recoveryScoped
       ? [
           "Recovery contract: your job is to RECOVER this task, not to do the work. Do not produce the deliverable yourself.",
-          "Before recovery work, make an authenticated GET /api/agents/me from your command shell using PAPERCLIP_API_URL and PAPERCLIP_API_KEY. If it fails, report control-plane access failure and do not claim a task update succeeded.",
           `Cause-specific instruction: ${recoveryInstruction}`,
           ...(recovery?.cause === "successful_run_missing_state" ||
           recovery?.cause === "successful_run_missing_issue_disposition"
