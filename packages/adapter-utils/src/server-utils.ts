@@ -2,6 +2,7 @@ import type { ExecutionContinuationEnvelope } from "@paperclipai/shared";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { constants as fsConstants, promises as fs, type Dirent } from "node:fs";
+import { isIP } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { CONNECTION_INTENT_AGENT_GUIDANCE } from "@paperclipai/shared";
@@ -3221,7 +3222,8 @@ export function buildPaperclipEnv(agent: {
   companyId: string;
 }, options: { executionTargetIsRemote?: boolean } = {}): Record<string, string> {
   const listenHost = (process.env.PAPERCLIP_LISTEN_HOST ?? process.env.HOST ?? "localhost").trim();
-  const listenerHasLoopback = ["", "localhost", "127.0.0.1", "::1", "0.0.0.0", "::"].includes(listenHost);
+  const listenerHasLoopback = ["", "localhost", "::1", "0.0.0.0", "::"].includes(listenHost) ||
+    (isIP(listenHost) === 4 && listenHost.startsWith("127."));
   const useLocalListener = options.executionTargetIsRemote === false &&
     Boolean(process.env.PAPERCLIP_LISTEN_PORT) && listenerHasLoopback;
   const resolveHostForUrl = (rawHost: string): string => {

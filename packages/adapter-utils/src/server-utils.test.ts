@@ -3864,6 +3864,22 @@ describe("buildPaperclipEnv", () => {
     );
   });
 
+  it("uses a custom IPv4 loopback listener for a host-local run", () => {
+    withEnv(
+      {
+        PAPERCLIP_API_URL: "https://public.example.invalid",
+        PAPERCLIP_LISTEN_HOST: "127.0.0.2",
+        PAPERCLIP_LISTEN_PORT: "3200",
+      },
+      () => {
+        expect(buildPaperclipEnv(
+          { id: "agent-1", companyId: "company-1" },
+          { executionTargetIsRemote: false },
+        ).PAPERCLIP_API_URL).toBe("http://127.0.0.2:3200");
+      },
+    );
+  });
+
   it("falls back to the derived runtime URL when no explicit override is set", () => {
     withEnv({ PAPERCLIP_RUNTIME_API_URL: "http://203.0.113.7:3100" }, () => {
       const env = buildPaperclipEnv({ id: "agent-1", companyId: "company-1" });
