@@ -1806,6 +1806,58 @@ describeEmbeddedPostgres("issue recovery actions", () => {
     expect((await db.select().from(issueRecoveryActions).where(eq(issueRecoveryActions.id, action!.id)))[0]).toEqual(recorded);
   });
 
+  it("restores a discarded queued-comment run that never reached the provider", async () => {
+    const { companyId, coderId, sourceIssueId } = await seedCompany();
+    const runId = randomUUID();
+    const discardedCommentId = randomUUID();
+    const [currentComment] = await db.insert(issueComments).values({
+      companyId,
+      issueId: sourceIssueId,
+      authorType: "user",
+      authorUserId: "local-board",
+      body: "Continue the explanation of agent roles.",
+    }).returning();
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId: coderId,
+      status: "cancelled",
+      errorCode: "queued_comment_discarded",
+      contextSnapshot: { issueId: sourceIssueId, commentId: discardedCommentId },
+    });
+    const [action] = await db.insert(issueRecoveryActions).values({
+      companyId,
+      sourceIssueId,
+      kind: "active_run_watchdog",
+      status: "resolved",
+      outcome: "blocked",
+      ownerType: "board",
+      returnOwnerAgentId: coderId,
+      cause: "legacy_execution_requires_reconciliation",
+      fingerprint: runId,
+      nextAction: "Recorded work is preserved without replay.",
+      evidence: { runId, automaticRecovery: { replay: "blocked", actionOutcome: "unknown" } },
+    }).returning();
+    const response = await request(createApp())
+      .post(`/api/issues/${sourceIssueId}/recovery-actions/resolve`)
+      .send({
+        actionId: action!.id,
+        outcome: "restored",
+        sourceIssueStatus: "todo",
+        executionReconciliation: {
+          runId,
+          providerStopped: true,
+          actionOutcome: "not_performed",
+          outcomeEvidence: "The queued run was discarded before dispatch and never started a provider process.",
+        },
+      })
+      .expect(200);
+    expect(response.body.issue.status).toBe("todo");
+    expect(response.body.recoveryAction.evidence.executionReconciliation).toMatchObject({ runId, actionOutcome: "not_performed" });
+    const [savedComment] = await db.select().from(issueComments).where(eq(issueComments.id, currentComment.id));
+    expect(savedComment.body).toBe("Continue the explanation of agent roles.");
+  });
+
   async function seedReconciledDelivery() {
     const fixture = await seedCompany();
     const { companyId, coderId, sourceIssueId } = fixture;

@@ -373,6 +373,66 @@ const support = await getEmbeddedPostgresTestSupport();
           }),
       );
     });
+    it("continues after an undispatched queued comment was discarded", async () => {
+      const discardedCommentId = randomUUID();
+      const discardedRunId = randomUUID();
+      const startedRunId = randomUUID();
+      const currentCommentId = randomUUID();
+      await db.insert(issueComments).values({
+        id: currentCommentId,
+        companyId,
+        issueId,
+        authorType: "user",
+        authorUserId: "local-board",
+        body: "Please explain the hierarchy.",
+        createdAt: new Date("2026-09-09T10:00:00Z"),
+      });
+      await db.insert(heartbeatRuns).values([
+        {
+          id: discardedRunId,
+          companyId,
+          agentId,
+          status: "cancelled",
+          errorCode: "queued_comment_discarded",
+          contextSnapshot: { issueId, commentId: discardedCommentId, wakeCommentIds: [discardedCommentId] },
+        },
+        {
+          id: startedRunId,
+          companyId,
+          agentId,
+          status: "cancelled",
+          errorCode: "queued_comment_discarded",
+          startedAt: new Date(),
+          contextSnapshot: { issueId, commentId: discardedCommentId, wakeCommentIds: [discardedCommentId] },
+        },
+      ]);
+      try {
+        const envelope = await buildExecutionContinuation({
+          db,
+          companyId,
+          issueId,
+          agentId,
+          context: { previousRunId: discardedRunId },
+          summary: null,
+          exposeLowTrustRaw: false,
+        });
+        expect(envelope.objective).toBe("Please explain the hierarchy.");
+        expect(envelope.messages.map((message) => message.id)).toEqual([notionId, gmailId, laterId, currentCommentId]);
+        await expectMissingContinuationContext(() => buildExecutionContinuation({
+          db,
+          companyId,
+          issueId,
+          agentId,
+          context: { previousRunId: startedRunId },
+          summary: null,
+          exposeLowTrustRaw: false,
+        }));
+      } finally {
+        await db.delete(heartbeatRuns).where(eq(heartbeatRuns.id, discardedRunId));
+        await db.delete(heartbeatRuns).where(eq(heartbeatRuns.id, startedRunId));
+        await db.delete(issueComments).where(eq(issueComments.id, currentCommentId));
+      }
+    });
     it.each(["done", "cancelled"])("rejects continuation after the task becomes %s", async (status) => {
       await db.update(issues).set({ status }).where(eq(issues.id, issueId));
       try {

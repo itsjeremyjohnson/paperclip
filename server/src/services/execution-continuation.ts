@@ -199,7 +199,15 @@ export async function buildExecutionContinuation(input: {
   const producerRunId = triggerInteraction?.sourceRunId ?? null;
   const sourceRunId = resumeSourceRunId ?? producerRunId;
   const loadRun = async (id: string) => (await db
-    .select({ context: heartbeatRuns.contextSnapshot, result: heartbeatRuns.resultJson })
+    .select({
+      context: heartbeatRuns.contextSnapshot,
+      result: heartbeatRuns.resultJson,
+      status: heartbeatRuns.status,
+      errorCode: heartbeatRuns.errorCode,
+      startedAt: heartbeatRuns.startedAt,
+      processPid: heartbeatRuns.processPid,
+      processGroupId: heartbeatRuns.processGroupId,
+    })
     .from(heartbeatRuns)
     .where(and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.id, id)))
   )[0];
@@ -228,19 +236,36 @@ export async function buildExecutionContinuation(input: {
       ))
     : [];
   const inheritedForeignIds = new Set(inheritedForeignComments.map(row => row.id));
+  const independentOrigins = new Set([
+    ...continuationOriginCommentIds(input.context),
+    ...recordedOrigins.filter(id => !inheritedForeignIds.has(id)),
+    ...(triggerInteraction?.sourceCommentId ? [triggerInteraction.sourceCommentId] : []),
+  ]);
+  const sourceOrigins = new Set(continuationOriginCommentIds(sourceRun?.context));
   const originCommentIds = [
     ...new Set([
       ...continuationOriginCommentIds(input.context),
       ...continuationOriginCommentIds(sourceRun?.context),
       ...recordedOrigins.filter(id => !inheritedForeignIds.has(id)),
-      ...(triggerInteraction?.sourceCommentId
-        ? [triggerInteraction.sourceCommentId]
-        : []),
+      ...(triggerInteraction?.sourceCommentId ? [triggerInteraction.sourceCommentId] : []),
     ]),
   ];
-  // Missing source rows cannot silently become a claim of complete context.
-  if (originCommentIds.some((id) => !rows.some((row) => row.id === id)))
+  const presentCommentIds = new Set(rows.map((row) => row.id));
+  const sourceWasDiscardedBeforeDispatch =
+    sourceRun?.status === "cancelled" &&
+    sourceRun.errorCode === "queued_comment_discarded" &&
+    sourceRun.startedAt === null &&
+    sourceRun.processPid === null &&
+    sourceRun.processGroupId === null;
+  // A discarded, never-dispatched queue can name a comment that was removed
+  // before the provider saw it. Every other missing origin still fails closed.
+  const discardedOriginIds = new Set(originCommentIds.filter((id) =>
+    !presentCommentIds.has(id) && sourceWasDiscardedBeforeDispatch &&
+    sourceOrigins.has(id) && !independentOrigins.has(id),
+  ));
+  if (originCommentIds.some((id) => !presentCommentIds.has(id) && !discardedOriginIds.has(id)))
     throw new Error("continuation_source_context_missing");
+  const retainedOriginCommentIds = originCommentIds.filter((id) => !discardedOriginIds.has(id));
   const messages = rows.map((row) => {
     const safe = input.exposeLowTrustRaw
       ? row
@@ -284,7 +309,7 @@ export async function buildExecutionContinuation(input: {
           baseRunId: input.previousContextRunId,
           messages: messages.filter(
             (message) =>
-              originCommentIds.includes(message.id) ||
+              retainedOriginCommentIds.includes(message.id) ||
               !deliveredMessages.some(
                 (prior) =>
                   prior.id === message.id &&
@@ -423,7 +448,7 @@ export async function buildExecutionContinuation(input: {
       interactionId: triggerInteraction?.id ?? null,
       sourceRunId,
     },
-    originCommentIds,
+    originCommentIds: retainedOriginCommentIds,
     objective: latestRequest?.body ?? issue.description ?? issue.title,
     objectiveSource,
     messages,
