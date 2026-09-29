@@ -28,7 +28,7 @@ COPY cli/package.json ./cli/package.json
 # The complete resolved lock (including transitive integrity hashes) is reviewed.
 # Reject registry-time drift BEFORE installing packages or running lifecycle code.
 # Refresh this digest together with source/provider dependency changes.
-ARG PAPERCLIP_RUNNER_LOCK_SHA256=0c06ab38c1d4b6b58e1c9f5ee85eb79f97cecd83e751b5d27c3b262faf5ab265
+ARG PAPERCLIP_RUNNER_LOCK_SHA256=3387dd079a2cc53bd19e1e5d447b82c7b324e216a0279505a6c44ef5cedbb2f4
 RUN printf '%s  pnpm-lock.yaml\n' "${PAPERCLIP_RUNNER_LOCK_SHA256}" > /tmp/provider-lock.sha256 \
     && sha256sum -c /tmp/provider-lock.sha256 \
     && pnpm install --frozen-lockfile --filter '@paperclipai/paperclip-runner...'
@@ -140,7 +140,7 @@ RUN /bin/sh -lc 'set -eu; \
     test "$(claude --version)" = "2.1.280 (Claude Code)"; \
     test "$(opencode --version)" = "1.18.32"; \
     test "$(acpx --version)" = "0.13.1"; \
-    test "$(claude-agent-acp --version)" = "0.73.0"; \
+    test "$(claude-agent-acp --version)" = "0.81.2"; \
     test "$(codex-acp --version)" = "@agentclientprotocol/codex-acp 1.6.2"'
 
 LABEL io.paperclip.runner.content-id="${PAPERCLIP_RUNNER_CONTENT_ID}" \
